@@ -192,3 +192,4 @@ def test_delete_nonexistent_inventory_item(client):
     data = response.get_json()
 
     assert data["error"] == "Inventory item not found"
+
