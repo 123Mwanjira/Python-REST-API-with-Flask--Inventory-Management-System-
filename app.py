@@ -1,5 +1,6 @@
 from flask import Flask, jsonify, request
 from inventory import inventory
+from external_api import get_product_by_barcode, search_product_by_name
 
 app = Flask(__name__)
 
@@ -51,7 +52,8 @@ def create_inventory_item():
     ]
 
     missing_fields = [
-        field for field in required_fields
+        field
+        for field in required_fields
         if field not in data
     ]
 
@@ -61,7 +63,11 @@ def create_inventory_item():
             "fields": missing_fields
         }), 400
 
-    new_id = max(item["id"] for item in inventory) + 1 if inventory else 1
+    new_id = (
+        max(item["id"] for item in inventory) + 1
+        if inventory
+        else 1
+    )
 
     new_item = {
         "id": new_id,
@@ -130,6 +136,90 @@ def delete_inventory_item(item_id):
     return jsonify({
         "error": "Inventory item not found"
     }), 404
+
+
+# GET product from OpenFoodFacts by barcode
+@app.route("/inventory/search/barcode/<barcode>", methods=["GET"])
+def find_product_by_barcode(barcode):
+    product = get_product_by_barcode(barcode)
+
+    if product is None:
+        return jsonify({
+            "error": "Product not found or external API unavailable"
+        }), 404
+
+    return jsonify({
+        "source": "OpenFoodFacts",
+        "product": product
+    }), 200
+
+
+# GET product from OpenFoodFacts by name
+@app.route("/inventory/search/name/<path:product_name>", methods=["GET"])
+def find_product_by_name(product_name):
+    product = search_product_by_name(product_name)
+
+    if product is None:
+        return jsonify({
+            "error": "Product not found or external API unavailable"
+        }), 404
+
+    return jsonify({
+        "source": "OpenFoodFacts",
+        "product": product
+    }), 200
+
+
+# POST product from OpenFoodFacts into inventory
+@app.route("/inventory/import/barcode/<barcode>", methods=["POST"])
+def import_product_by_barcode(barcode):
+    product = get_product_by_barcode(barcode)
+
+    if product is None:
+        return jsonify({
+            "error": "Product not found or external API unavailable"
+        }), 404
+
+    new_id = (
+        max(item["id"] for item in inventory) + 1
+        if inventory
+        else 1
+    )
+
+    new_item = {
+        "id": new_id,
+        "barcode": product.get("code", barcode),
+        "product_name": product.get(
+            "product_name",
+            "Unknown Product"
+        ),
+        "brand": product.get(
+            "brands",
+            "Unknown Brand"
+        ),
+        "category": product.get(
+            "categories",
+            "Unknown Category"
+        ),
+        "price": 0,
+        "stock": 0,
+        "ingredients_text": product.get(
+            "ingredients_text",
+            ""
+        ),
+        "quantity": product.get(
+            "quantity",
+            ""
+        )
+    }
+
+    inventory.append(new_item)
+
+    return jsonify({
+        "message": "Product imported successfully",
+        "source": "OpenFoodFacts",
+        "item": new_item
+    }), 201
 
 
 if __name__ == "__main__":
